@@ -61,6 +61,7 @@ typedef struct TCP {
     unsigned short window;
     unsigned short checksum;
     unsigned short urg_ptr;
+    unsigned char option[40];
 }TCP;
 
 typedef struct UDP {//각각 16bit
@@ -80,6 +81,7 @@ int showIP(IP ip);
 void showTCP(TCP tcp,unsigned int trsp_len);
 void showUDP(UDP udp, unsigned int trsp_len);
 void flag_check(unsigned short len_flag);
+void showOption(unsigned char* option,unsigned int real_hlen);
 
 //전역
 pkt_H packetHeader[MAX_PACKET];
@@ -117,7 +119,7 @@ void Parse(FILE* fp) {
         showFileHeader(ph); //time, caplen, actual len 출력
         Mac mac;
         fread(&mac, sizeof(mac), 1, fp); //mac 읽고,
-        showMac(mac);//mac 출력
+        //showMac(mac);//mac 출력
         char tmpIP[65536];//ip packet의 최대 크기
         char tmpTransport[65536];//tcp,udp packet의 최대 크기
         //caplen = 실제 packet의 크기
@@ -137,7 +139,7 @@ void Parse(FILE* fp) {
             ++ ip_hlen은 전역변수로 설정해서 showIP 함수 이후에, ip_hlen에 실제 ip헤더의 크기(%d)가 저장되어 있도록!
             */
         }
-        //caplen - 14 - ip_hlen;
+        //caplen - 14(mac) - ip_hlen;
         unsigned int trsp_len = (ph->caplen) - 14 - ip_hlen;
         if (tcp_udp == 1) {
             TCP* tcp = (TCP*)tmpTransport;
@@ -214,13 +216,13 @@ int ver_hlen(unsigned char ver_hlen) {
 
 int showIP(IP ip) {
 
-    showIPaddr(ip);//IP address
+    //showIPaddr(ip);//IP address
     printf("Total LEN: %u byte,  ", ntohs(ip.tot)); //Total Length
-    printf(" TTL: %d\n", ip.ttl); //Time to Live
+    //printf(" TTL: %d\n", ip.ttl); //Time to Live
     ip_hlen =ver_hlen(ip.ver_hlen);//Version and HLEN
-    printf("Id: %d,   ", ntohs(ip.id)); //Identification
+    //printf("Id: %d,   ", ntohs(ip.id)); //Identification
     //Flag
-    if (DF(ip.frag))
+    /*if (DF(ip.frag))
         printf("DF=1,   ");
     else {
         if (MF(ip.frag) == 0)
@@ -228,7 +230,7 @@ int showIP(IP ip) {
         else
             printf("DF=0 and MF=1,   ");
     }
-    printf("Fragment Offset: %d\n", 8 * (ntohs(ip.frag) & 0x1fff));
+    printf("Fragment Offset: %d\n", 8 * (ntohs(ip.frag) & 0x1fff));*/
 
     int transport=0;
 
@@ -296,25 +298,28 @@ void showTCP(TCP tcp, unsigned int trsp_len) {
     unsigned short urg_ptr;
     */
     unsigned int real_hlen = 4 * (((ntohs(tcp.len_flag)) & 0xF000) >> 12);
-    puts("");
+    puts("\n-----------------------\n<TCP PARSING START>");
     printf("src Port : %d   dst Port : %u\n", ntohs(tcp.src_port), ntohs(tcp.dst_port));
-    printf("starting sequence num : %u\nending sequence num : %u\n", ntohl(tcp.seq_num),ntohl(tcp.seq_num)+trsp_len-real_hlen-1);
+    printf("starting sequence num : %u\n", ntohl(tcp.seq_num));
+    if(trsp_len - real_hlen==0)
+        printf("ending sequence num : %u\n",ntohl(tcp.seq_num));
+    else
+        printf("ending sequence num : %u\n",ntohl(tcp.seq_num)+trsp_len-real_hlen-1);
+
     printf("Acknowledgement number : %u\n", ntohl(tcp.ack_num));
     printf("TCP payload size : %u\n", trsp_len-real_hlen);
-    printf("find hlen : %d\n", real_hlen);
+    printf("TCP Header len : %d\n", real_hlen);
     printf("window size : %u\n",ntohs(tcp.window));
     flag_check(tcp.len_flag);
 
     if (trsp_len - real_hlen > max_tcp)
         max_tcp = trsp_len - real_hlen;
 
-    if (trsp_len - real_hlen > 0) {
+    if (real_hlen - 20>0) {
         //find TCP option
         printf("tcp option exists\n");
+        showOption(tcp.option,real_hlen);
     }
-
-    printf("\nthis is showTCP function\n");
-
 }
 
 void showUDP(UDP udp, unsigned int trsp_len) {
@@ -324,14 +329,46 @@ void showUDP(UDP udp, unsigned int trsp_len) {
     unsigned short totlen;
     unsigned short checksum;
     */
-    puts("");
+    puts("\n-----------------------\n<UDP PARSING START>");
     printf("src Port : %d   dst Port : %d\n", ntohs(udp.src_port), ntohs(udp.dst_port));
     printf("UDP payload : %d\n", ntohs(udp.totlen)-8);
 
     if (ntohs(udp.totlen) - 8 > max_udp)
         max_udp = ntohs(udp.totlen) - 8;
-
-    printf("\nthis is showUDP function\n");
-
 }
 
+void showOption(unsigned char* option,unsigned int real_hlen) {
+    unsigned char type;
+    unsigned char len;
+    unsigned short mss;
+    unsigned char shift_cnt;
+
+    //real_hlen-20 = option length
+    //printf("option : %x\n", option[]);
+   for (int i = 0; i < real_hlen-20; i++) {
+       if (option[i] == 0 || option[i] == 1)
+           continue;
+       else if (option[i] == 2) {//mss type2
+           i++;
+           printf("option type : mss\n");
+           printf("option len : %u\n", option[i]);
+           mss = (256 * option[i + 1]) + option[i + 2];//1byte씩 읽으니까 endian은 상관없는데, 단위가 달라져서 16^2 해줘야 함
+           printf("mss size : %u\n", mss);
+           i = i + 2;
+       }
+       else if (option[i] == 3) {
+           i++;
+           printf("option type : Window scale factor\n");
+           printf("option len : %u\n", option[i]);
+           i++;
+           printf("shift count : %u\n", option[i]);
+           i++;
+       }
+       else if (option[i] == 4) {
+           i++;
+           printf("option type : SACK Permitted\n");
+           printf("option len : %u\n", option[i]);
+       }
+    }
+}
+//gkgk
