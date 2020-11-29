@@ -4,7 +4,8 @@
 #include <WinSock2.h>
 #include <time.h>
 #pragma comment(lib,"ws2_32")
-#define MAX_PACKET 500
+#define MAX_PACKET 700
+
 #define MAC_ADDR 6
 #define DF(frag) (frag & 0x40)
 #define MF(frag) (frag & 0x20)
@@ -217,7 +218,7 @@ int ver_hlen(unsigned char ver_hlen) {
 int showIP(IP ip) {
 
     //showIPaddr(ip);//IP address
-    printf("Total LEN: %u byte,  ", ntohs(ip.tot)); //Total Length
+    printf("Total LEN in IP header: %u byte,  ", ntohs(ip.tot)); //Total Length
     //printf(" TTL: %d\n", ip.ttl); //Time to Live
     ip_hlen =ver_hlen(ip.ver_hlen);//Version and HLEN
     //printf("Id: %d,   ", ntohs(ip.id)); //Identification
@@ -269,7 +270,7 @@ void flag_check(unsigned short len_flag) {
         else
             uaprsf[i] = 0;
     }
-    puts("");
+    puts("-----------------------\nTCP FLAG CHECK\n");
     printf("URG : %d\n", uaprsf[0]);
     printf("ACK : %d\n", uaprsf[1]);
     printf("PSH : %d\n", uaprsf[2]);
@@ -299,17 +300,18 @@ void showTCP(TCP tcp, unsigned int trsp_len) {
     */
     unsigned int real_hlen = 4 * (((ntohs(tcp.len_flag)) & 0xF000) >> 12);
     puts("\n-----------------------\n<TCP PARSING START>");
-    printf("src Port : %d   dst Port : %u\n", ntohs(tcp.src_port), ntohs(tcp.dst_port));
-    printf("starting sequence num : %u\n", ntohl(tcp.seq_num));
+    printf("SRC Port num : %d  DST Port num : %u\n", ntohs(tcp.src_port), ntohs(tcp.dst_port));
+    printf("Starting SEQ num : %u\n", ntohl(tcp.seq_num));
     if(trsp_len - real_hlen==0)
-        printf("ending sequence num : %u\n",ntohl(tcp.seq_num));
+        printf("Ending SEQ num : %u\n",ntohl(tcp.seq_num));
     else
-        printf("ending sequence num : %u\n",ntohl(tcp.seq_num)+trsp_len-real_hlen-1);
+        printf("Ending SEQ num : %u\n",ntohl(tcp.seq_num)+trsp_len-real_hlen-1);
+    //trsp_len-real_hlen = tcp - tcp header(fixed + option) = tcp payload
 
     printf("Acknowledgement number : %u\n", ntohl(tcp.ack_num));
     printf("TCP payload size : %u\n", trsp_len-real_hlen);
     printf("TCP Header len : %d\n", real_hlen);
-    printf("window size : %u\n",ntohs(tcp.window));
+    printf("Window size : %u\n",ntohs(tcp.window));
     flag_check(tcp.len_flag);
 
     if (trsp_len - real_hlen > max_tcp)
@@ -317,9 +319,10 @@ void showTCP(TCP tcp, unsigned int trsp_len) {
 
     if (real_hlen - 20>0) {
         //find TCP option
-        printf("tcp option exists\n");
         showOption(tcp.option,real_hlen);
-    }
+    }else
+        printf("TCP option does not exist\n");
+
 }
 
 void showUDP(UDP udp, unsigned int trsp_len) {
@@ -330,7 +333,7 @@ void showUDP(UDP udp, unsigned int trsp_len) {
     unsigned short checksum;
     */
     puts("\n-----------------------\n<UDP PARSING START>");
-    printf("src Port : %d   dst Port : %d\n", ntohs(udp.src_port), ntohs(udp.dst_port));
+    printf("SRC Port num : %d   DST Port num : %d\n", ntohs(udp.src_port), ntohs(udp.dst_port));
     printf("UDP payload : %d\n", ntohs(udp.totlen)-8);
 
     if (ntohs(udp.totlen) - 8 > max_udp)
@@ -342,33 +345,71 @@ void showOption(unsigned char* option,unsigned int real_hlen) {
     unsigned char len;
     unsigned short mss;
     unsigned char shift_cnt;
-
+    puts("-----------------------\nTCP OPTION CHECK\n");
+    int index = 1;
     //real_hlen-20 = option length
     //printf("option : %x\n", option[]);
    for (int i = 0; i < real_hlen-20; i++) {
-       if (option[i] == 0 || option[i] == 1)
+       if (option[i] == 0 || option[i] == 1) {
+           printf("nop \n");
            continue;
+       }
        else if (option[i] == 2) {//mss type2
+           printf("<OPTION %d>\n", index++);
            i++;
-           printf("option type : mss\n");
-           printf("option len : %u\n", option[i]);
+           printf("Type : MSS\n");
+           printf("Len : %u\n", option[i]);
            mss = (256 * option[i + 1]) + option[i + 2];//1byte씩 읽으니까 endian은 상관없는데, 단위가 달라져서 16^2 해줘야 함
-           printf("mss size : %u\n", mss);
+           printf("MSS size : %u\n", mss);
            i = i + 2;
        }
        else if (option[i] == 3) {
+           printf("<OPTION %d>\n", index++);
            i++;
-           printf("option type : Window scale factor\n");
-           printf("option len : %u\n", option[i]);
+           printf("Type : Window scale factor\n");
+           printf("Len : %u\n", option[i]);
            i++;
-           printf("shift count : %u\n", option[i]);
+           printf("Shift Count : %u\n", option[i]);
            i++;
        }
        else if (option[i] == 4) {
+           printf("<OPTION %d>\n", index++);
            i++;
-           printf("option type : SACK Permitted\n");
-           printf("option len : %u\n", option[i]);
+           printf("Type : SACK Permitted\n");
+           printf("Len : %u\n", option[i]);
        }
+       else if (option[i] == 5) {
+           printf("<OPTION %d>\n", index++);
+           i++;
+           printf("Type : SACK Data\n");
+           printf("Len : %u\n", option[i]);
+           i++;
+           printf("Left edge : %u\n", option[i]);
+       }
+       else if (option[i] == 8) {
+           printf("<OPTION %d>\n", index++);
+           i++;
+           printf("Type : Timestamp\n");
+           printf("Len : %u\n", option[i++]);
+           double tmstmp = 0;
+           for (int ii = 0; ii < 8; ii++) {
+               tmstmp += pow(256, 7 - ii) * option[i++];
+           }
+           printf("Timestamp : %lf\n", tmstmp);
+       }
+     
+       puts("");
     }
 }
 //gkgk
+
+/*
+else if (option[i] == 5) {
+printf("<OPTION %d>\n", index++);
+i++;
+printf("Type : SACK Permitted\n");
+len = option[i];
+//unsigned long
+printf("Len : %u\n", option[i]);
+       }
+*/
