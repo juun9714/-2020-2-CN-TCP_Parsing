@@ -339,6 +339,11 @@ void showUDP(UDP udp, unsigned int trsp_len) {
     */
     puts("\n-----------------------\n<UDP PARSING>");
     printf("SRC Port num : %d   DST Port num : %d\n", ntohs(udp.src_port), ntohs(udp.dst_port));
+    printf("SRC Port : ");
+    showApp(ntohs(udp.src_port));
+    printf("\nDST port : ");
+    showApp(ntohs(udp.dst_port));
+    puts("");
     printf("UDP payload : %d bytes\n", ntohs(udp.totlen)-8);
 
     if (ntohs(udp.totlen) - 8 > max_udp)
