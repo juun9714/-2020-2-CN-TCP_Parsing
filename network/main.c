@@ -5,7 +5,6 @@
 #include <time.h>
 #pragma comment(lib,"ws2_32")
 #define MAX_PACKET 700
-
 #define MAC_ADDR 6
 #define DF(frag) (frag & 0x40)
 #define MF(frag) (frag & 0x20)
@@ -83,6 +82,7 @@ void showTCP(TCP tcp,unsigned int trsp_len);
 void showUDP(UDP udp, unsigned int trsp_len);
 void flag_check(unsigned short len_flag);
 void showOption(unsigned char* option,unsigned int real_hlen);
+void showApp(unsigned short portnum);
 
 //전역
 pkt_H packetHeader[MAX_PACKET];
@@ -154,7 +154,7 @@ void Parse(FILE* fp) {
             printf("\nIt is not tcp or udp packet\n");
         }
     }
-    printf("done done done max_tcp : %d\nmax_udp : %d\n", max_tcp,max_udp);
+    printf("\nMAX_TCP_SIZE : %d\nMAX_UDP_SIZE : %d\n", max_tcp,max_udp);
 }
 
 
@@ -299,8 +299,13 @@ void showTCP(TCP tcp, unsigned int trsp_len) {
     unsigned short urg_ptr;
     */
     unsigned int real_hlen = 4 * (((ntohs(tcp.len_flag)) & 0xF000) >> 12);
-    puts("\n-----------------------\n<TCP PARSING START>");
+    puts("\n-----------------------\n<TCP PARSING>");
     printf("SRC Port num : %d  DST Port num : %u\n", ntohs(tcp.src_port), ntohs(tcp.dst_port));
+    printf("SRC Port : ");
+    showApp(ntohs(tcp.src_port));
+    printf("\nDST port : ");
+    showApp(ntohs(tcp.dst_port));
+    puts("");
     printf("Starting SEQ num : %u\n", ntohl(tcp.seq_num));
     if(trsp_len - real_hlen==0)
         printf("Ending SEQ num : %u\n",ntohl(tcp.seq_num));
@@ -309,7 +314,7 @@ void showTCP(TCP tcp, unsigned int trsp_len) {
     //trsp_len-real_hlen = tcp - tcp header(fixed + option) = tcp payload
 
     printf("Acknowledgement number : %u\n", ntohl(tcp.ack_num));
-    printf("TCP payload size : %u\n", trsp_len-real_hlen);
+    printf("TCP payload size : %u bytes\n", trsp_len-real_hlen);
     printf("TCP Header len : %d\n", real_hlen);
     printf("Window size : %u\n",ntohs(tcp.window));
     flag_check(tcp.len_flag);
@@ -332,27 +337,25 @@ void showUDP(UDP udp, unsigned int trsp_len) {
     unsigned short totlen;
     unsigned short checksum;
     */
-    puts("\n-----------------------\n<UDP PARSING START>");
+    puts("\n-----------------------\n<UDP PARSING>");
     printf("SRC Port num : %d   DST Port num : %d\n", ntohs(udp.src_port), ntohs(udp.dst_port));
-    printf("UDP payload : %d\n", ntohs(udp.totlen)-8);
+    printf("UDP payload : %d bytes\n", ntohs(udp.totlen)-8);
 
     if (ntohs(udp.totlen) - 8 > max_udp)
         max_udp = ntohs(udp.totlen) - 8;
 }
 
 void showOption(unsigned char* option,unsigned int real_hlen) {
-    unsigned char type;
-    unsigned char len;
     unsigned short mss;
-    unsigned char shift_cnt;
     puts("-----------------------\nTCP OPTION CHECK\n");
     int index = 1;
+    unsigned int LE = 0 , RE = 0;
     //real_hlen-20 = option length
     //printf("option : %x\n", option[]);
    for (int i = 0; i < real_hlen-20; i++) {
        if (option[i] == 0 || option[i] == 1) {
-           printf("nop \n");
-           continue;
+           printf("<OPTION %d>\n", index++);
+           printf("No Operation\n\n");
        }
        else if (option[i] == 2) {//mss type2
            printf("<OPTION %d>\n", index++);
@@ -360,8 +363,8 @@ void showOption(unsigned char* option,unsigned int real_hlen) {
            printf("Type : MSS\n");
            printf("Len : %u\n", option[i]);
            mss = (256 * option[i + 1]) + option[i + 2];//1byte씩 읽으니까 endian은 상관없는데, 단위가 달라져서 16^2 해줘야 함
-           printf("MSS size : %u\n", mss);
-           i = i + 2;
+           printf("MSS size : %u\n\n", mss);
+           i = i + 1;
        }
        else if (option[i] == 3) {
            printf("<OPTION %d>\n", index++);
@@ -369,14 +372,13 @@ void showOption(unsigned char* option,unsigned int real_hlen) {
            printf("Type : Window scale factor\n");
            printf("Len : %u\n", option[i]);
            i++;
-           printf("Shift Count : %u\n", option[i]);
-           i++;
+           printf("Shift Count : %u\n\n", option[i]);
        }
        else if (option[i] == 4) {
            printf("<OPTION %d>\n", index++);
-           i++;
            printf("Type : SACK Permitted\n");
-           printf("Len : %u\n", option[i]);
+           i++;
+           printf("Len : %u\n\n", option[i]);
        }
        else if (option[i] == 5) {
            printf("<OPTION %d>\n", index++);
@@ -384,7 +386,14 @@ void showOption(unsigned char* option,unsigned int real_hlen) {
            printf("Type : SACK Data\n");
            printf("Len : %u\n", option[i]);
            i++;
-           printf("Left edge : %u\n", option[i]);
+           for (int ii = 0; ii < 4; ii++) {
+               LE += pow(256, 3 - ii) * option[i++];
+           }
+           printf("Left edge : %u\n", LE);
+           for (int ii = 0; ii < 4; ii++) {
+               RE += pow(256, 3 - ii) * option[i++];
+           }
+           printf("Right edge : %u\n\n", RE);
        }
        else if (option[i] == 8) {
            printf("<OPTION %d>\n", index++);
@@ -395,21 +404,157 @@ void showOption(unsigned char* option,unsigned int real_hlen) {
            for (int ii = 0; ii < 8; ii++) {
                tmstmp += pow(256, 7 - ii) * option[i++];
            }
-           printf("Timestamp : %lf\n", tmstmp);
+           printf("Timestamp : %lf\n\n", tmstmp);
+           i = i - 1;
        }
+       else if (option[i] ==28) {
+           printf("<OPTION %d>\n", index++);
+           i++;
+           printf("Type : User Timeout\n");
+           printf("Len : %u\n", option[i++]);
+           printf("User Timeout : %u\n\n", 256 * option[i] + option[i + 1]);
+       }
+       //tcp-AO 현재 사용안함
      
-       puts("");
     }
 }
-//gkgk
 
-/*
-else if (option[i] == 5) {
-printf("<OPTION %d>\n", index++);
-i++;
-printf("Type : SACK Permitted\n");
-len = option[i];
-//unsigned long
-printf("Len : %u\n", option[i]);
-       }
-*/
+void showApp(unsigned short portnum) {
+    switch (portnum) {
+    case 1:
+        printf("TCPMUX");
+        break;
+    case 7:
+        printf("ECHO");
+        break;
+    case 9:
+        printf("DISCARD");
+        break;
+    case 13:
+        printf("DAYTIME");
+        break;
+    case 17:
+        printf("QOTD");
+        break;
+    case 19:
+        printf("CHARGEN");
+        break;
+    case 20:
+        printf("FTP(Data port)");
+        break;
+    case 21:
+        printf("FTP(Control port)");
+        break;
+    case 22:
+        printf("SSH");
+        break;
+    case 23:
+        printf("TELNET");
+        break;
+    case 25:
+        printf("SMTP");
+        break;
+    case 37:
+        printf("TIME");
+        break;
+    case 49:
+        printf("TACACS");
+        break;
+    case 53:
+        printf("DNS");
+        break;
+    case 67:
+        printf("BOOTP or DHCP");
+        break;
+    case 69:
+        printf("TFTP");
+        break;
+    case 70:
+        printf("Gopher");
+        break;
+    case 79:
+        printf("Finger");
+        break;
+    case 80:
+        printf("HTTP");
+        break;
+    case 88:
+        printf("KERBEROS");
+        break;
+    case 109:
+        printf("POP2");
+        break;
+    case 110:
+        printf("POP3");
+        break;
+    case 113:
+        printf("IDENT");
+        break;
+    case 119:
+        printf("NNTP");
+        break;
+    case 123:
+        printf("NTP");
+        break;
+    case 139:
+        printf("NetBIOS");
+        break;
+    case 143:
+        printf("IMAP4");
+        break;
+    case 161:
+        printf("SNMP");
+        break;
+    case 179:
+        printf("BGP");
+        break;
+    case 194:
+        printf("IRC");
+        break;
+    case 389:
+        printf("LDAP");
+        break;
+    case 443:
+        printf("HTTPS (HTTP over SSL)");
+        break;
+    case 445:
+        printf("Microsoft-DS");
+        break;
+    case 465:
+        printf("SSL over SMTP");
+        break;
+    case 514:
+        printf("syslog");
+        break;
+    case 540:
+        printf("UUCP");
+        break;
+    case 542:
+        printf("Commerce Applications");
+        break;
+    case 587:
+        printf("SMTP");
+        break;
+    case 591:
+        printf("FileMaker");
+        break;
+    case 636:
+        printf("LDAP over SSL");
+        break;
+    case 873:
+        printf("rsync");
+        break;
+    case 981:
+        printf("SofaWare Technologies Checkpoint Firewall-1");
+        break;
+    case 993:
+        printf("IMAP4 over SSL");
+        break;
+    case 995:
+        printf("POP3 over SSL");
+        break;
+    default:
+        printf("Unknown Application");
+        break;
+    }
+}
