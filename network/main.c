@@ -91,6 +91,7 @@ int ip_hlen=0;
 unsigned short max_tcp=0;
 unsigned short max_udp=0;
 
+
 int main() {
     FILE* fp;
     fp = fopen("packet3.pcap", "rb");
@@ -197,14 +198,16 @@ void showIPaddr(IP ip) {
     //src_ip 4byte
     int s, d;
     printf("SRC IP address : ");
-    for (s = 0; s < 3; s++)
+    for (s = 0; s < 3; s++) {
         printf("%u.", ip.src_ip[s]);
+    }
     printf("%u ->  ", ip.src_ip[s]);
 
     //dst_ip 4byte
     printf("DST IP address : ");
-    for (d = 0; d < 3; d++)
+    for (d = 0; d < 3; d++) {
         printf("%u.", ip.dst_ip[d]);
+    }
     printf("%u\n", ip.dst_ip[d]);
 }
 
@@ -217,7 +220,7 @@ int ver_hlen(unsigned char ver_hlen) {
 
 int showIP(IP ip) {
 
-    //showIPaddr(ip);//IP address
+    showIPaddr(ip);//IP address
     printf("Total LEN in IP header: %u byte,  ", ntohs(ip.tot)); //Total Length
     //printf(" TTL: %d\n", ip.ttl); //Time to Live
     ip_hlen =ver_hlen(ip.ver_hlen);//Version and HLEN
@@ -298,6 +301,7 @@ void showTCP(TCP tcp, unsigned int trsp_len) {
     unsigned short checksum;
     unsigned short urg_ptr;
     */
+
     unsigned int real_hlen = 4 * (((ntohs(tcp.len_flag)) & 0xF000) >> 12);
     puts("\n-----------------------\n<TCP PARSING>");
     printf("SRC Port num : %d  DST Port num : %u\n", ntohs(tcp.src_port), ntohs(tcp.dst_port));
